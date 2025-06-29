@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>シンプルジグソーパズル</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f5f5f5;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            width: 100%;
+            margin: 0 auto;
+            text-align: center;
+        }
+        .form-container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            width: 100%;
+            max-width: 600px;
+            display: inline-block;
+            text-align: left;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #puzzle-container {
+            position: relative;
+            margin: 20px auto;
+            border: 2px solid #333;
+            background-color: #eee;
+            display: none;
+            overflow: hidden;
+        }
+        .puzzle-piece {
+            position: absolute;
+            cursor: move;
+            border: 1px solid #333;
+            box-sizing: border-box;
+            background-size: cover;
+            background-repeat: no-repeat;
+            user-select: none;
+        }
+        .puzzle-piece.locked {
+            border-color: #4CAF50;
+            border-width: 2px;
+            z-index: 1;
+        }
+        #status {
+            margin-top: 20px;
+            font-weight: bold;
+            color: #333;
+        }
+        #error-message {
+            color: red;
+            margin-top: 10px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>シンプルジグソーパズル</h1>
+        
+        <div class="form-container">
+            <div class="form-group">
+                <label for="image">画像を選択:</label>
+                <input type="file" id="image" accept="image/*" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="rows">行数:</label>
+                <input type="number" id="rows" min="2" max="5" value="2">
+            </div>
+            
+            <div class="form-group">
+                <label for="cols">列数:</label>
+                <input type="number" id="cols" min="2" max="5" value="2">
+            </div>
+            
+            <button id="create-puzzle-btn">パズルを作成</button>
+            <div id="error-message"></div>
+        </div>
+        
+        <div id="puzzle-container"></div>
+        <div id="status"></div>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const createPuzzleBtn = document.getElementById('create-puzzle-btn');
+            const puzzleContainer = document.getElementById('puzzle-container');
+            const errorMessage = document.getElementById('error-message');
+            const statusDiv = document.getElementById('status');
+            
+            let pieces = [];
+            let lockedPieces = 0;
+            let totalPieces = 0;
+            let originalImage = null;
+            
+            // Handle create puzzle button click
+            createPuzzleBtn.addEventListener('click', function() {
+                // Clear previous error messages
+                errorMessage.textContent = '';
+                statusDiv.textContent = '';
+                
+                const imageInput = document.getElementById('image');
+                const rows = parseInt(document.getElementById('rows').value);
+                const cols = parseInt(document.getElementById('cols').value);
+                
+                if (!imageInput.files || !imageInput.files[0]) {
+                    errorMessage.textContent = '画像を選択してください';
+                    return;
+                }
+                
+                // Validate rows and columns
+                if (rows < 2 || rows > 5 || cols < 2 || cols > 5) {
+                    errorMessage.textContent = '行数と列数は2から5の間で指定してください';
+                    return;
+                }
+                
+                statusDiv.textContent = '画像を読み込み中...';
+                
+                try {
+                    const file = imageInput.files[0];
+                    const reader = new FileReader();
+                    
+                    reader.onload = function(e) {
+                        try {
+                            const img = new Image();
+                            
+                            img.onload = function() {
+                                try {
+                                    originalImage = img;
+                                    createPuzzle(img, rows, cols);
+                                    statusDiv.textContent = 'パズルを開始！ピースをドラッグして正しい位置に配置してください。';
+                                } catch (err) {
+                                    console.error('パズル作成エラー:', err);
+                                    errorMessage.textContent = 'パズル作成中にエラーが発生しました: ' + err.message;
+                                    statusDiv.textContent = '';
+                                }
+                            };
+                            
+                            img.onerror = function() {
+                                errorMessage.textContent = '画像の読み込みに失敗しました';
+                                statusDiv.textContent = '';
+                            };
+                            
+                            img.src = e.target.result;
+                        } catch (err) {
+                            console.error('画像読み込みエラー:', err);
+                            errorMessage.textContent = '画像処理中にエラーが発生しました: ' + err.message;
+                            statusDiv.textContent = '';
+                        }
+                    };
+                    
+                    reader.onerror = function() {
+                        errorMessage.textContent = 'ファイルの読み込みに失敗しました';
+                        statusDiv.textContent = '';
+                    };
+                    
+                    reader.readAsDataURL(file);
+                } catch (err) {
+                    console.error('ファイル読み込みエラー:', err);
+                    errorMessage.textContent = 'ファイル処理中にエラーが発生しました: ' + err.message;
+                    statusDiv.textContent = '';
+                }
+            });
+            
+            function createPuzzle(img, rows, cols) {
+                // Reset puzzle state
+                puzzleContainer.innerHTML = '';
+                pieces = [];
+                lockedPieces = 0;
+                totalPieces = rows * cols;
+                
+                // Calculate dimensions
+                const maxWidth = 600;
+                const maxHeight = 400;
+                
+                let imgWidth = img.width;
+                let imgHeight = img.height;
+                
+                // Scale down image if it's too large
+                if (imgWidth > maxWidth) {
+                    const scale = maxWidth / imgWidth;
+                    imgWidth = maxWidth;
+                    imgHeight = imgHeight * scale;
+                }
+                
+                if (imgHeight > maxHeight) {
+                    const scale = maxHeight / imgHeight;
+                    imgHeight = maxHeight;
+                    imgWidth = imgWidth * scale;
+                }
+                
+                // Set puzzle container dimensions
+                puzzleContainer.style.width = imgWidth + 'px';
+                puzzleContainer.style.height = imgHeight + 'px';
+                puzzleContainer.style.display = 'block';
+                
+                // Calculate piece dimensions
+                const pieceWidth = Math.floor(imgWidth / cols);
+                const pieceHeight = Math.floor(imgHeight / rows);
+                
+                // Create a canvas to draw the scaled image
+                const canvas = document.createElement('canvas');
+                canvas.width = imgWidth;
+                canvas.height = imgHeight;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, imgWidth, imgHeight);
+                
+                // Create pieces
+                for (let row = 0; row < rows; row++) {
+                    for (let col = 0; col < cols; col++) {
+                        // Create piece canvas
+                        const pieceCanvas = document.createElement('canvas');
+                        pieceCanvas.width = pieceWidth;
+                        pieceCanvas.height = pieceHeight;
+                        const pieceCtx = pieceCanvas.getContext('2d');
+                        
+                        // Draw the piece image
+                        pieceCtx.drawImage(
+                            canvas,
+                            col * pieceWidth, row * pieceHeight,
+                            pieceWidth, pieceHeight,
+                            0, 0,
+                            pieceWidth, pieceHeight
+                        );
+                        
+                        // Create piece element
+                        const pieceElement = document.createElement('div');
+                        pieceElement.className = 'puzzle-piece';
+                        pieceElement.dataset.row = row;
+                        pieceElement.dataset.col = col;
+                        pieceElement.dataset.correctX = col * pieceWidth + 'px';
+                        pieceElement.dataset.correctY = row * pieceHeight + 'px';
+                        
+                        // Set random initial position
+                        const randomX = Math.floor(Math.random() * (imgWidth - pieceWidth));
+                        const randomY = Math.floor(Math.random() * (imgHeight - pieceHeight));
+                        
+                        pieceElement.style.width = pieceWidth + 'px';
+                        pieceElement.style.height = pieceHeight + 'px';
+                        pieceElement.style.left = randomX + 'px';
+                        pieceElement.style.top = randomY + 'px';
+                        pieceElement.style.backgroundImage = `url(${pieceCanvas.toDataURL()})`;
+                        
+                        // Make draggable
+                        makeDraggable(pieceElement);
+                        
+                        puzzleContainer.appendChild(pieceElement);
+                        pieces.push(pieceElement);
+                    }
+                }
+            }
+            
+            function makeDraggable(element) {
+                let isDragging = false;
+                let offsetX = 0;
+                let offsetY = 0;
+                
+                element.addEventListener('mousedown', startDrag);
+                element.addEventListener('touchstart', startDrag, {passive: false});
+                
+                function startDrag(e) {
+                    e.preventDefault();
+                    
+                    // Don't allow dragging locked pieces
+                    if (element.classList.contains('locked')) {
+                        return;
+                    }
+                    
+                    isDragging = true;
+                    
+                    // Get cursor position
+                    let clientX, clientY;
+                    if (e.type === 'touchstart') {
+                        clientX = e.touches[0].clientX;
+                        clientY = e.touches[0].clientY;
+                    } else {
+                        clientX = e.clientX;
+                        clientY = e.clientY;
+                    }
+                    
+                    // Calculate offset from piece top-left corner
+                    const rect = element.getBoundingClientRect();
+                    offsetX = clientX - rect.left;
+                    offsetY = clientY - rect.top;
+                    
+                    // Bring piece to front
+                    element.style.zIndex = '10';
+                    
+                    // Add move and end event listeners
+                    document.addEventListener('mousemove', drag);
+                    document.addEventListener('touchmove', drag, {passive: false});
+                    document.addEventListener('mouseup', endDrag);
+                    document.addEventListener('touchend', endDrag);
+                }
+                
+                function drag(e) {
+                    if (!isDragging) return;
+                    e.preventDefault();
+                    
+                    // Get cursor position
+                    let clientX, clientY;
+                    if (e.type === 'touchmove') {
+                        clientX = e.touches[0].clientX;
+                        clientY = e.touches[0].clientY;
+                    } else {
+                        clientX = e.clientX;
+                        clientY = e.clientY;
+                    }
+                    
+                    // Calculate new position
+                    const containerRect = puzzleContainer.getBoundingClientRect();
+                    const pieceWidth = parseInt(element.style.width);
+                    const pieceHeight = parseInt(element.style.height);
+                    
+                    let newX = clientX - containerRect.left - offsetX;
+                    let newY = clientY - containerRect.top - offsetY;
+                    
+                    // Keep piece within container boundaries
+                    newX = Math.max(0, Math.min(newX, containerRect.width - pieceWidth));
+                    newY = Math.max(0, Math.min(newY, containerRect.height - pieceHeight));
+                    
+                    // Move the piece
+                    element.style.left = newX + 'px';
+                    element.style.top = newY + 'px';
+                }
+                
+                function endDrag() {
+                    if (!isDragging) return;
+                    isDragging = false;
+                    
+                    // Check if piece is close to its correct position
+                    const correctX = parseInt(element.dataset.correctX);
+                    const correctY = parseInt(element.dataset.correctY);
+                    const currentX = parseInt(element.style.left);
+                    const currentY = parseInt(element.style.top);
+                    
+                    const pieceWidth = parseInt(element.style.width);
+                    const pieceHeight = parseInt(element.style.height);
+                    const snapThreshold = Math.min(pieceWidth, pieceHeight) / 3;
+                    
+                    if (Math.abs(currentX - correctX) < snapThreshold && 
+                        Math.abs(currentY - correctY) < snapThreshold) {
+                        // Snap to correct position
+                        element.style.left = element.dataset.correctX;
+                        element.style.top = element.dataset.correctY;
+                        element.classList.add('locked');
+                        
+                        // Count locked pieces
+                        lockedPieces++;
+                        
+                        // Check if puzzle is complete
+                        if (lockedPieces === totalPieces) {
+                            setTimeout(() => {
+                                statusDiv.textContent = 'おめでとうございます！パズルが完成しました！';
+                                alert('おめでとうございます！パズルが完成しました！');
+                            }, 300);
+                        }
+                    }
+                    
+                    // Reset z-index
+                    element.style.zIndex = '';
+                    
+                    // Remove event listeners
+                    document.removeEventListener('mousemove', drag);
+                    document.removeEventListener('touchmove', drag);
+                    document.removeEventListener('mouseup', endDrag);
+                    document.removeEventListener('touchend', endDrag);
+                }
+            }
+        });
+    </script>
+</body>
+</html>
